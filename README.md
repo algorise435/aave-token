@@ -1,67 +1,70 @@
-# Aave Token design
+# Aave Token Design
 
-AAVE is an ERC-20 compatible token. It implements governance-inspired features, and will allow Aave to bootstrap the rewards program for safety and ecosystem growth.
-The following document explains the main features of AAVE, it’s monetary policy, and the redemption process from LEND.
+AAVE is an ERC-20–compatible token. It implements governance-inspired features and allows Aave to bootstrap the rewards program for safety and ecosystem growth.  
+This document explains the main features of AAVE, its monetary policy, and the redemption process from LEND.
 
 ## Roles
 
-The initial AAVE token implementation does not have any admin roles configured. The contract will be proxied using the Openzeppelin implementation of the EIP-1967 Transparent Proxy pattern. The proxy has an Admin role, and the Admin of the proxy contract will be set upon deployment to the Aave governance contracts.
+The initial AAVE token implementation does not have any admin roles configured. The contract will be proxied using OpenZeppelin’s implementation of the EIP-1967 Transparent Proxy pattern. The proxy has an Admin role, and the Admin of the proxy contract will be set upon deployment to the Aave governance contracts.
 
 ## ERC-20
 
-The AAVE token implements the standard methods of the ERC-20 interface. A balance snapshot feature has been added to keep track of the balances of the users at specific block heights. This will help with the Aave governance integration of AAVE.
-AAVE also integrates the EIP 2612 `permit` function, that will allow gasless transaction and one tx approval/transfer.
+The AAVE token implements the standard methods of the ERC-20 interface. A balance-snapshot feature has been added to keep track of user balances at specific block heights. This helps with the Aave governance integration of AAVE.  
+AAVE also integrates the EIP-2612 `permit` function, which allows gasless transactions and one-tx approval/transfer.
 
 # LendToAaveMigrator
 
-Smart contract for LEND token holders to execute the migration to the AAVE token, using part of the initial emission of AAVE for it.
+A smart contract for LEND token holders to execute the migration to the AAVE token, using part of the initial emission of AAVE for it.
 
-The contract is covered by a proxy, whose owner will be the AAVE governance. Once the governance passes the corresponding proposal, the proxy will be connected to the implementation and LEND holders will be able to call the `migrateFromLend()` function, which, after LEND approval, will pull LEND from the holder wallet and transfer back an equivalent AAVE amount defined by the `LEND_AAVE_RATIO` constant.
+The contract is covered by a proxy whose owner will be AAVE governance. Once governance passes the corresponding proposal, the proxy will be connected to the implementation and LEND holders will be able to call the `migrateFromLend()` function, which—after LEND approval—will pull LEND from the holder’s wallet and transfer back an equivalent AAVE amount defined by the `LEND_AAVE_RATIO` constant.
 
-One tradeOff of `migrateFromLend()` is that, as the AAVE total supply will be lower than LEND, the `LEND_AAVE_RATIO` will be always > 1, causing a loss of precision for amounts of LEND that are not multiple of `LEND_AAVE_RATIO`. E.g. a person sending 1.000000000000000022 LEND, with a `LEND_AAVE_RATIO` == 100, will receive 0.01 AAVE, losing the value of the last 22 small units of LEND.
-Taking into account the current value of LEND and the future value of AAVE, a lack of precision for less than LEND_AAVE_RATIO small units represents a value several orders of magnitude smaller than 0.01\$. We evaluated some potential solutions for this, specifically:
+One trade-off of `migrateFromLend()` is that, as the AAVE total supply will be lower than LEND, the `LEND_AAVE_RATIO` will always be > 1, causing a loss of precision for amounts of LEND that are not multiples of `LEND_AAVE_RATIO`.  
+For example, a person sending 1.000000000000000022 LEND with `LEND_AAVE_RATIO == 100` will receive 0.01 AAVE, losing the value of the last 22 small units of LEND.
 
-1. Rounding half up the amount of AAVE returned from the migration. This opens up to potential attacks where users might purposely migrate less than LEND_AAVE_RATIO to obtain more AAVE as a result of the round up.
-2. Returning back the excess LEND: this would leave LEND in circulation forever, which is not the expected end result of the migration.
-3. Require the users to migrate only amounts that are multiple of LEND_AAVE_RATIO: This presents considerable UX friction.
+Given the current value of LEND and the expected value of AAVE, a lack of precision for fewer than `LEND_AAVE_RATIO` small units represents a value several orders of magnitude smaller than $0.01. We evaluated potential solutions:
 
-None of those present a better outcome than the implemented solution.
+1. Rounding half up the amount of AAVE returned from migration — opens attacks where users purposely migrate less than `LEND_AAVE_RATIO` to gain from rounding.
+2. Returning back the excess LEND — leaves LEND in circulation forever, which is not the intended final state.
+3. Requiring users to migrate only amounts that are multiples of `LEND_AAVE_RATIO` — creates considerable UX friction.
 
-## The Redemption process
+None presents a better outcome than the implemented solution.
 
-The first step to bootstrap the AAVE emission is to deploy the AAVE token contract and the  LendToAaveMigrator contract. This task will be performed by the Aave team. Upon deployment, the ownership of the Proxy of the AAVE contract and the LendToAaveMigrator will be set to the Aave Governance. To start the LEND redemption process at that point, the Aave team will create an AIP (Aave Improvement Proposal) and submit a proposal to the Aave governance. The proposal will, once approved, activate the LEND/AAVE redemption process and the ecosystem incentives, which will mark the initial emission of AAVE on the market.
-The result of the migration procedure will see the supply of LEND being progressively locked within the new AAVE smart contract, while at the same time an equivalent amount of AAVE is being issued.  
-The amount of AAVE equivalent to the LEND tokens burned in the initial phase of the AAVE protocol will remain locked in the LendToAaveMigrator contract.
+## The Redemption Process
 
-## Technical implementation
+The first step to bootstrap AAVE emission is to deploy the AAVE token contract and the LendToAaveMigrator contract. This task will be performed by the Aave team. Upon deployment, the ownership of the AAVE Proxy and the LendToAaveMigrator will be set to Aave Governance.
 
-### Changes to the Openzeppelin original contracts
+To start the LEND redemption process, the Aave team will create an AIP (Aave Improvement Proposal) and submit it to governance. Once approved, the proposal will activate the LEND/AAVE redemption process and the ecosystem incentives, marking the initial emission of AAVE on the market.
 
-In the context of this implementation, we needed apply the following changes to the OpenZepplin implementation:
+As migration proceeds, the supply of LEND will be progressively locked within the new AAVE smart contract, while an equivalent amount of AAVE is issued. The amount of AAVE equivalent to the LEND tokens burned in the initial phase of the AAVE protocol will remain locked in the LendToAaveMigrator contract.
 
-- In `/contracts/open-zeppelin/ERC20.sol`, line 44 and 45, `_name` and `_symbol` have been changed from `private` to `internal`
-- We extended the original `Initializable` class from the Openzeppelin contracts and created a `VersionedInitializable` contract. The main differences compared to the `Initializable` are:
+## Technical Implementation
 
-1. The boolean `initialized` has been replaced with a `uint256 latestInitializedRevision`.
-2. The `initializer()` modifier fetch the revision of the implementation using a `getRevision()` function defined in the implementation contract. The `initializer` modifier forces that an implementation
-3. with a bigger revision number than the current one is being initialized
+### Changes to OpenZeppelin Contracts
 
-The change allows us to call `initialize()` on multiple implementations, that was not possible with the original `Initializable` implementation from OZ.
+In this implementation, we applied the following changes to OpenZeppelin:
 
-### \_beforeTokenTransfer hook
+- In `/contracts/open-zeppelin/ERC20.sol`, lines 44–45, `_name` and `_symbol` were changed from `private` to `internal`.
+- We extended `Initializable` and created `VersionedInitializable`. Differences:
+  1. The boolean `initialized` is replaced with `uint256 latestInitializedRevision`.
+  2. The `initializer()` modifier fetches the implementation’s revision via `getRevision()` defined in the implementation contract.
+  3. The `initializer()` modifier enforces that only an implementation with a higher revision number than the current one can be initialized.
 
-We override the \_beforeTokenTransfer function on the OZ base ERC20 implementation in order to include the following features:
+These changes allow calling `initialize()` on multiple implementations, which is not possible with the original OpenZeppelin `Initializable`.
 
-1. Snapshotting of balances every time an action involved a transfer happens (mint, burn, transfer or transferFrom). If the account does a transfer to itself, no new snapshot is done.
-2. Call to the Aave governance contract forwarding the same input parameters of the `_beforeTokenTransfer` hook. Its an assumption that the Aave governance contract is a trustable party, being its responsibility to control all potential reentrancies if calling back the AaveToken. If the account does a transfer to itself, no interaction with the Aave governance contract should happen.
+### `_beforeTokenTransfer` Hook
 
-## Development deployment
+We override `_beforeTokenTransfer` in the base ERC-20 to include:
 
-For development purposes, you can deploy AaveToken and LendToAaveMigrator to a local network via the following command:
+1. Snapshotting balances every time an action involving a transfer occurs (mint, burn, `transfer`, or `transferFrom`). If the account transfers to itself, no snapshot is created.
+2. A call to the Aave governance contract forwarding the same input parameters as the `_beforeTokenTransfer` hook. It’s assumed the Aave governance contract is a trusted party responsible for controlling any potential reentrancy if it calls back into `AaveToken`. If the account transfers to itself, no governance interaction occurs.
 
-```
+## Development Deployment
+
+For development, deploy `AaveToken` and `LendToAaveMigrator` to a local network:
+
+```bash
 npm run dev:deployment
-```
+
 
 For any other network, you can run the deployment in the following way
 
